@@ -1254,8 +1254,8 @@
     <nav class="header-nav">
       <button class="nav-btn active" onclick="showPage('dashboard')"><i class="fa-solid fa-chart-line"></i> Dashboard</button>
       <button class="nav-btn" onclick="showPage('transaksi')"><i class="fa-solid fa-list"></i> Transaksi</button>
-      <button class="nav-btn" onclick="showPage('rekap')"><i class="fa-solid fa-file-invoice"></i> Rekap Pekanan</button>
-      <button class="nav-btn" onclick="showPage('input')"><i class="fa-solid fa-plus"></i> Input</button>
+      <button class="nav-btn" onclick="showPage('rekap')"><i class="fa-solid fa-file-invoice"></i> Rekap Pekanan <i class="fa-solid fa-lock" style="font-size:9px;opacity:0.6;margin-left:2px;"></i></button>
+      <button class="nav-btn" onclick="showPage('input')"><i class="fa-solid fa-plus"></i> Input <i class="fa-solid fa-lock" style="font-size:9px;opacity:0.6;margin-left:2px;"></i></button>
       <button class="nav-btn" onclick="showPage('donasi')"><i class="fa-solid fa-hand-holding-heart"></i> Donasi</button>
     </nav>
   </div>
@@ -1276,12 +1276,12 @@
     </button>
     <button class="mobile-nav-btn" onclick="showPage('rekap')">
       <i class="fa-solid fa-file-invoice"></i>
-      <span>Rekap</span>
+      <span>Rekap 🔒</span>
       <span class="mnb-dot"></span>
     </button>
     <button class="mobile-nav-btn" onclick="showPage('input')">
       <i class="fa-solid fa-plus-circle"></i>
-      <span>Input</span>
+      <span>Input 🔒</span>
       <span class="mnb-dot"></span>
     </button>
     <button class="mobile-nav-btn" onclick="showPage('donasi')">
@@ -1743,7 +1743,7 @@
     </div>
     <div style="font-size:12px;color:var(--green);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;">DKM Masjid Jabal Rahmah</div>
     <h3>Login Pengurus</h3>
-    <p>Masukkan password untuk mengakses halaman input transaksi.</p>
+    <p id="pwPageLabel">Masukkan password untuk mengakses halaman ini.</p>
     <div class="pw-divider"></div>
     <div class="pw-input-wrap">
       <input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPassword()">
@@ -1796,12 +1796,20 @@ let inputUnlocked = false;
 /* =========================================================
    NAVIGASI HALAMAN
    ========================================================= */
+const PROTECTED_PAGES = ['input', 'rekap'];
+let pendingPage = '';
+
 function showPage(id) {
-  if (id === 'input' && !inputUnlocked) {
-    pendingPage = 'input';
+  if (PROTECTED_PAGES.includes(id) && !inputUnlocked) {
+    pendingPage = id;
     document.getElementById('pwOverlay').classList.remove('hidden');
     document.getElementById('pwInput').value = '';
     document.getElementById('pwError').textContent = '';
+    const label = document.getElementById('pwPageLabel');
+    if (label) {
+      const nama = id === 'rekap' ? 'Rekap Pekanan' : 'Input Transaksi';
+      label.textContent = `Masukkan password untuk mengakses halaman ${nama}.`;
+    }
     setTimeout(() => document.getElementById('pwInput').focus(), 100);
     return;
   }
@@ -1816,13 +1824,11 @@ function showPage(id) {
     document.querySelectorAll('.mobile-nav-btn')[idx].classList.add('active');
   }
   if (id === 'rekap') buildRekapPreview();
-  // Scroll ke atas saat ganti halaman di mobile
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-let pendingPage = '';
 
 /* =========================================================
-   PASSWORD OVERLAY
+   LOGIN OVERLAY
    ========================================================= */
 function checkPassword() {
   const val = document.getElementById('pwInput').value;
@@ -1832,7 +1838,7 @@ function checkPassword() {
     document.getElementById('pwOverlay').classList.add('hidden');
     showPage(pendingPage || 'input');
   } else {
-    document.getElementById('pwError').textContent = 'Password salah. Coba lagi.';
+    document.getElementById('pwError').innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Password salah. Coba lagi.';
     inp.classList.add('shake');
     inp.value = '';
     setTimeout(() => inp.classList.remove('shake'), 500);
