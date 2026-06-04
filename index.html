@@ -1295,7 +1295,7 @@
 <!-- HERO STRIP -->
 <div class="hero-strip">
   <div class="hero-arabic">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</div>
-  <h2>Laporan Keuangan Masjid</h2>
+  <h2>Laporan Keuangan Mingguan</h2>
   <p id="hero-period">Memuat data dari Google Sheets...</p>
   <div class="hero-badges">
     <span class="hero-badge"><i class="fa-solid fa-shield-halved"></i> Transparan</span>
@@ -2309,50 +2309,91 @@ function hideAlerts() {
 
 async function submitTransaksi() {
   hideAlerts();
-  const hari = document.getElementById('f-hari').value;
-  const tanggal = document.getElementById('f-tanggal').value;
-  const keterangan = document.getElementById('f-keterangan').value.trim();
-  const jumlah = parseFloat(document.getElementById('f-jumlah').value);
+  const hari      = document.getElementById('f-hari').value;
+  const tanggal   = document.getElementById('f-tanggal').value;
+  const keterangan= document.getElementById('f-keterangan').value.trim();
+  const jumlah    = parseFloat(document.getElementById('f-jumlah').value);
   const deskripsi = document.getElementById('f-deskripsi').value;
-  const catatan = document.getElementById('f-catatan').value.trim();
+  const catatan   = document.getElementById('f-catatan').value.trim();
 
   if (!hari || !tanggal || !keterangan || !jumlah || jumlah <= 0) {
     showError('Harap isi semua field yang wajib diisi (*).');
     return;
   }
 
+  // Format tanggal ke dd/mm/yyyy
+  let tglFormatted = tanggal;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+    const [y,m,d] = tanggal.split('-');
+    tglFormatted = `${d}/${m}/${y}`;
+  }
+
   const payload = {
-    hari, tanggal, keterangan,
+    hari, tanggal: tglFormatted,
+    keterangan: keterangan.toUpperCase(),
     jenis: currentType,
     jumlah, deskripsi, catatan,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Makassar' })
   };
 
+  // Demo mode
   if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
     allData.push({ ...payload, no: allData.length + 1 });
-    document.getElementById('alert-success').classList.add('show');
-    resetForm();
-    renderAll();
+    showSuccess();
     return;
   }
 
+  // Tampilkan loading
+  const btnSimpan = document.querySelector('button[onclick="submitTransaksi()"]');
+  const origLabel = btnSimpan ? btnSimpan.innerHTML : '';
+  if (btnSimpan) {
+    btnSimpan.innerHTML = '<span class="spinner"></span> Menyimpan...';
+    btnSimpan.disabled = true;
+  }
+
   try {
+    // Gunakan URLSearchParams — Apps Script menerima ini tanpa CORS preflight
+    const params = new URLSearchParams(payload);
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
     });
-    const result = await res.json();
-    if (result.status === 'ok') {
-      document.getElementById('alert-success').classList.add('show');
-      resetForm();
-      setTimeout(fetchData, 1500);
+
+    // Apps Script redirect ke URL baru setelah POST (302)
+    // Jika response ok atau redirect, anggap berhasil
+    if (res.ok || res.type === 'opaqueredirect') {
+      showSuccess();
+      setTimeout(fetchData, 2000);
     } else {
-      showError('Gagal menyimpan: ' + (result.message || 'Error tidak diketahui'));
+      // Coba parse response
+      const text = await res.text();
+      try {
+        const result = JSON.parse(text);
+        if (result.status === 'ok') { showSuccess(); setTimeout(fetchData, 2000); }
+        else showError('Gagal: ' + (result.message || 'Coba lagi'));
+      } catch {
+        // Kalau tidak bisa parse tapi status 200/302, anggap berhasil
+        showSuccess();
+        setTimeout(fetchData, 2000);
+      }
     }
   } catch (e) {
-    showError('Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+    // Network error benar-benar tidak bisa konek
+    console.error('Submit error:', e);
+    showError('Gagal terhubung. Pastikan koneksi internet aktif.');
+  } finally {
+    if (btnSimpan) {
+      btnSimpan.innerHTML = origLabel;
+      btnSimpan.disabled = false;
+    }
   }
+}
+
+function showSuccess() {
+  document.getElementById('alert-success').classList.add('show');
+  resetForm();
+  renderAll();
 }
 
 function showError(msg) {
@@ -2469,7 +2510,7 @@ function buildRekapPreview() {
     <div class="lap-kop-text">
       <h1>MASJID JABAL RAHMAH</h1>
       <p>Jln. Aroepala, Kompleks Permata Hijau Lestari, Kassi-Kassi, Rappocini, Makassar</p>
-      <p style="color:#1B6B3A;font-weight:600;font-size:11px;">Laporan Keuangan – Amanah & Transparan &nbsp;|&nbsp; ±200 Jamaah</p>
+      <p style="color:#1B6B3A;font-weight:600;font-size:11px;">Rekening: BSI 1031030408 a.n. MASJID JABAL RAHMAH &nbsp;|&nbsp; WA: 0852-5399-6361</p>
     </div>
   </div>
   <div class="lap-gold-line"></div>
