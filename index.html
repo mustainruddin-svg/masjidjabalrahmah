@@ -1710,7 +1710,7 @@
       </div>
       <div class="rekap-field" style="margin-bottom:16px;max-width:400px;">
         <label>Saldo Awal Periode (Rp)</label>
-        <input type="number" id="rk-saldo-awal" value="94764339" placeholder="Saldo awal sebelum periode ini">
+        <input type="number" id="rk-saldo-awal" value="93318339" placeholder="Saldo awal sebelum periode ini">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;max-width:640px;">
         <div class="rekap-field">
@@ -1792,12 +1792,12 @@
 const SHEET_ID = '1AHehqOa4bCgBva5g2HEkzuVlmCOBM1svZ4jjpTxte9Y';
 const SHEET_NAME_TRANSAKSI = 'Transaksi';
 const SHEET_GID = '1446321595';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbizDyKWySsJWyZFtwwd3EDc_nMShdEvBk3ksw3aC60DrUArCI7rFHZJ13_1G8MOYDAw/exec';
-// Ganti password di bawah ini sesuai kebutuhan
+// GID sheet Pengaturan — isi setelah cek URL saat tab Pengaturan aktif di Sheets
+const SHEET_GID_PENGATURAN = '1739895289'; // Sheet Pengaturan
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsCaNbsJOVFTB8la00udVjDYsafMb0CP7mpsADfsCQuSZSoGTkOV0ZE7ay5Prl6_PLJg/exec';
 const INPUT_PASSWORD = 'masjid2026';
-
-// URL fetch data — gunakan gviz/tq dengan published sheet ID
 const FETCH_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+const FETCH_URL_PENGATURAN = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID_PENGATURAN}`;
 
 /* =========================================================
    STATE GLOBAL
@@ -1990,6 +1990,92 @@ function setSyncStatus(msg, live) {
 }
 
 /* =========================================================
+   FETCH PENGATURAN DARI SHEET PENGATURAN
+   ========================================================= */
+async function fetchPengaturan() {
+  try {
+    const url = APPS_SCRIPT_URL + '?action=pengaturan&_=' + Date.now();
+    const res  = await fetch(url);
+    const text = await res.text();
+
+    let result;
+    try {
+      const start = text.indexOf('{');
+      const end   = text.lastIndexOf('}') + 1;
+      result = JSON.parse(text.substring(start, end));
+    } catch(e) {
+      console.warn('fetchPengaturan: gagal parse JSON', e);
+      return;
+    }
+
+    if (result.status !== 'ok' || !result.data) return;
+    const cfg = result.data;
+
+    const setField = (id, key) => {
+      const el = document.getElementById(id);
+      if (el && cfg[key] !== undefined && String(cfg[key]).trim() !== '') {
+        el.value = cfg[key];
+      }
+    };
+
+    setField('rk-ketua',             'nama_ketua');
+    setField('rk-jabatan-ketua',     'jabatan_ketua');
+    setField('rk-bendahara',         'nama_bendahara');
+    setField('rk-jabatan-bendahara', 'jabatan_bendahara');
+    setField('rk-khatib',            'khatib');
+
+    if (cfg['imam'] || cfg['muadzin']) {
+      const el = document.getElementById('rk-imam');
+      if (el) {
+        const imam    = cfg['imam']    || '';
+        const muadzin = cfg['muadzin'] || '';
+        el.value = muadzin ? `${imam} / ${muadzin}` : imam;
+      }
+    }
+
+    // Validasi & set saldo
+    const MAX = 10_000_000_000;
+    const parseSaldo = v => {
+      const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+      return (!isNaN(n) && n > 0 && n < MAX) ? n : null;
+    };
+
+    const saldoAwal = parseSaldo(cfg['saldo_awal']);
+    const saldoKas  = parseSaldo(cfg['saldo_kas']);
+    const saldoBank = parseSaldo(cfg['saldo_bank']);
+
+    if (saldoAwal !== null) {
+      document.getElementById('rk-saldo-awal').value = saldoAwal;
+      document.getElementById('rk-saldo-kas').value  = saldoKas  ?? 1446000;
+      document.getElementById('rk-saldo-bank').value = saldoBank ?? Math.max(0, saldoAwal - (saldoKas ?? 1446000));
+    } else {
+      const el = document.getElementById('rk-saldo-awal');
+      if (el) {
+        el.style.borderColor = '#C0392B';
+        el.placeholder = '⚠️ Periksa saldo_awal di sheet Pengaturan';
+        el.value = '';
+      }
+    }
+
+    // Update konstanta saldo agar dashboard ikut sinkron
+    const sa = parseSaldo(cfg['saldo_awal']);
+    const sk = parseSaldo(cfg['saldo_kas']);
+    const sb = parseSaldo(cfg['saldo_bank']);
+    if (sa !== null) {
+      window.CFG_SALDO_AWAL = sa;
+      window.CFG_SALDO_KAS  = sk ?? 1446000;
+      window.CFG_SALDO_BANK = sb ?? sa;
+      renderSummary(); // refresh dashboard dengan nilai baru
+    }
+
+    console.log('✅ Pengaturan dari Apps Script:', Object.keys(cfg).length, 'entri');
+
+  } catch(e) {
+    console.warn('fetchPengaturan gagal:', e.message);
+  }
+}
+
+/* =========================================================
    DATA DEMO (fallback jika Sheets belum dikonfigurasi)
    ========================================================= */
 function getDemoData() {
@@ -2028,28 +2114,37 @@ function renderAll() {
 /* =========================================================
    SUMMARY CARDS
    ========================================================= */
+
+// Nilai saldo dari sheet Pengaturan — otomatis diupdate oleh fetchPengaturan()
+// Update manual di sini jika Apps Script tidak tersedia
+var CFG_SALDO_AWAL = 93318339;   // saldo_awal di sheet Pengaturan
+var CFG_SALDO_KAS  = 1446000;    // saldo_kas di sheet Pengaturan
+var CFG_SALDO_BANK = 93318339;   // saldo_bank di sheet Pengaturan
+
 function renderSummary() {
   const penerimaan = allData.filter(d => d.jenis === 'Penerimaan');
   const pengeluaran = allData.filter(d => d.jenis === 'Pengeluaran');
-  const totalIn = penerimaan.reduce((s, d) => s + d.jumlah, 0);
-  const totalOut = pengeluaran.reduce((s, d) => s + d.jumlah, 0);
-  const saldoPrev = 94764339.41;
-  const saldoTotal = saldoPrev + totalIn - totalOut;
-  const kasIn = penerimaan.filter(d => d.metode === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
-  const kasOut = pengeluaran.filter(d => d.metode === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
-  const bankIn = penerimaan.filter(d => d.metode === 'BANK').reduce((s,d) => s+d.jumlah, 0);
-  const bankOut = pengeluaran.filter(d => d.metode === 'BANK').reduce((s,d) => s+d.jumlah, 0);
-  const saldoKas = kasIn - kasOut;
-  const saldoBank = saldoPrev + bankIn - bankOut;
+  const totalIn    = penerimaan.reduce((s,d) => s + d.jumlah, 0);
+  const totalOut   = pengeluaran.reduce((s,d) => s + d.jumlah, 0);
 
-  document.getElementById('s-total-in').textContent = fmt(totalIn);
-  document.getElementById('s-total-out').textContent = fmt(totalOut);
-  document.getElementById('s-saldo-kas').textContent = fmt(Math.max(0, saldoKas + 1446000));
-  document.getElementById('s-saldo-bank').textContent = fmt(91795339.41);
-  document.getElementById('s-saldo-total').textContent = fmt(93241339.41);
-  document.getElementById('s-saldo-prev').textContent = fmt(saldoPrev);
+  // Hitung saldo kas & bank berdasarkan transaksi + saldo awal
+  const kasIn    = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
+  const kasOut   = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
+  const bankIn   = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
+  const bankOut  = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
 
-  // Update hero-period dari field rekap yang aktif
+  const saldoKas   = CFG_SALDO_KAS  + kasIn  - kasOut;
+  const saldoBank  = (CFG_SALDO_BANK - CFG_SALDO_KAS) + bankIn - bankOut;
+  const saldoTotal = CFG_SALDO_AWAL  + totalIn - totalOut;
+
+  document.getElementById('s-total-in').textContent    = fmt(totalIn);
+  document.getElementById('s-total-out').textContent   = fmt(totalOut);
+  document.getElementById('s-saldo-kas').textContent   = fmt(Math.max(0, saldoKas));
+  document.getElementById('s-saldo-bank').textContent  = fmt(Math.max(0, saldoBank));
+  document.getElementById('s-saldo-total').textContent = fmt(saldoTotal);
+  document.getElementById('s-saldo-prev').textContent  = fmt(CFG_SALDO_AWAL);
+  document.getElementById('s-period-label').textContent = ''; // diisi updateHeroPeriod
+
   updateHeroPeriod();
 }
 
@@ -2872,6 +2967,7 @@ document.getElementById('f-tanggal').valueAsDate = new Date();
 initRekapDates();
 filteredData = [];
 fetchData();
+fetchPengaturan(); // Sinkron nilai dari sheet Pengaturan
 
 // Auto-refresh tiap 5 menit
 setInterval(fetchData, 5 * 60 * 1000);
