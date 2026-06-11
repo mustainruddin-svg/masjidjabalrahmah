@@ -1677,11 +1677,11 @@
       <div class="rekap-fields">
         <div class="rekap-field">
           <label>Dari Tanggal</label>
-          <input type="date" id="rk-dari">
+          <input type="date" id="rk-dari" oninput="updateHeroPeriod()">
         </div>
         <div class="rekap-field">
           <label>Sampai Tanggal</label>
-          <input type="date" id="rk-sampai">
+          <input type="date" id="rk-sampai" oninput="updateHeroPeriod()">
         </div>
         <div class="rekap-field">
           <label>Nama Ketua Umum</label>
@@ -2048,8 +2048,9 @@ function renderSummary() {
   document.getElementById('s-saldo-bank').textContent = fmt(91795339.41);
   document.getElementById('s-saldo-total').textContent = fmt(93241339.41);
   document.getElementById('s-saldo-prev').textContent = fmt(saldoPrev);
-  document.getElementById('s-period-label').textContent = 'Periode: 15 – 22 Mei 2026';
-  document.getElementById('hero-period').textContent = 'Periode 15 – 22 Mei 2026 | Jum\'at, 22 Mei 2026';
+
+  // Update hero-period dari field rekap yang aktif
+  updateHeroPeriod();
 }
 
 /* =========================================================
@@ -2809,11 +2810,50 @@ function doPrint() {
 }
 
 /* =========================================================
+   UPDATE HERO PERIOD – dari field rekap pekanan
+   ========================================================= */
+function updateHeroPeriod() {
+  const dari   = document.getElementById('rk-dari')?.value;
+  const sampai = document.getElementById('rk-sampai')?.value;
+
+  const fmtTgl = (dateStr) => {
+    const d = parseDate(dateStr);
+    if (!d) return dateStr || '–';
+    return d.toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+  };
+
+  const fmtHari = (dateStr) => {
+    const d = parseDate(dateStr);
+    if (!d) return '';
+    return d.toLocaleDateString('id-ID', { weekday:'long' });
+  };
+
+  let periodeTeks = 'Memuat periode...';
+  let heroTeks    = 'Memuat data dari Google Sheets...';
+
+  if (dari && sampai) {
+    const tglDari   = fmtTgl(dari);
+    const tglSampai = fmtTgl(sampai);
+    const hariAkhir = fmtHari(sampai);
+    periodeTeks = `Periode ${tglDari} s/d ${tglSampai}`;
+    heroTeks    = `${periodeTeks} | ${hariAkhir}, ${tglSampai}`;
+  } else if (dari) {
+    periodeTeks = `Dari ${fmtTgl(dari)}`;
+    heroTeks    = periodeTeks;
+  }
+
+  const heroPeriodEl   = document.getElementById('hero-period');
+  const periodLabelEl  = document.getElementById('s-period-label');
+  if (heroPeriodEl)  heroPeriodEl.textContent  = heroTeks;
+  if (periodLabelEl) periodLabelEl.textContent = periodeTeks;
+}
+
+/* =========================================================
    INISIALISASI DEFAULT TANGGAL REKAP
    ========================================================= */
 function initRekapDates() {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=minggu,5=jumat
+  const dayOfWeek = now.getDay();
   // Jumat lalu
   const lastFriday = new Date(now);
   lastFriday.setDate(now.getDate() - ((dayOfWeek + 2) % 7));
@@ -2824,6 +2864,9 @@ function initRekapDates() {
   const fmt2 = d => d.toISOString().slice(0,10);
   document.getElementById('rk-dari').value   = fmt2(startOfWeek);
   document.getElementById('rk-sampai').value = fmt2(lastFriday);
+
+  // Langsung update hero strip sesuai periode default
+  updateHeroPeriod();
 }
 document.getElementById('f-tanggal').valueAsDate = new Date();
 initRekapDates();
