@@ -2053,9 +2053,19 @@ async function fetchPengaturan() {
     const saldoBank = parseSaldo(cfg['saldo_bank']);
 
     if (saldoAwal !== null) {
+      // Set konstanta global
+      window.CFG_SALDO_AWAL = saldoAwal;
+      window.CFG_SALDO_KAS  = saldoKas  ?? 0;
+      // CFG_SALDO_BANK = saldo rekening bank saja (bukan total)
+      window.CFG_SALDO_BANK = saldoBank ?? Math.max(0, saldoAwal - (saldoKas ?? 0));
+      window.CFG_LOADED = true;
+
+      // Isi field form rekap
       document.getElementById('rk-saldo-awal').value = saldoAwal;
-      document.getElementById('rk-saldo-kas').value  = saldoKas  ?? 1446000;
-      document.getElementById('rk-saldo-bank').value = saldoBank ?? Math.max(0, saldoAwal - (saldoKas ?? 1446000));
+      document.getElementById('rk-saldo-kas').value  = window.CFG_SALDO_KAS;
+      document.getElementById('rk-saldo-bank').value = window.CFG_SALDO_BANK;
+
+      renderSummary(); // refresh dashboard dengan nilai aktual
     } else {
       const el = document.getElementById('rk-saldo-awal');
       if (el) {
@@ -2123,11 +2133,12 @@ function renderAll() {
    SUMMARY CARDS
    ========================================================= */
 
-// Nilai saldo dari sheet Pengaturan — otomatis diupdate oleh fetchPengaturan()
-// Update manual di sini jika Apps Script tidak tersedia
-var CFG_SALDO_AWAL = 93318339;   // saldo_awal di sheet Pengaturan
-var CFG_SALDO_KAS  = 1446000;    // saldo_kas di sheet Pengaturan
-var CFG_SALDO_BANK = 93318339;   // saldo_bank di sheet Pengaturan
+// Nilai saldo — diisi otomatis oleh fetchPengaturan() dari sheet Pengaturan
+// Jangan ubah manual di sini, update via sheet Pengaturan
+var CFG_SALDO_AWAL = 0;
+var CFG_SALDO_KAS  = 0;
+var CFG_SALDO_BANK = 0;
+var CFG_LOADED     = false; // flag: sudah dapat data dari Pengaturan?
 
 function renderSummary() {
   const penerimaan = allData.filter(d => d.jenis === 'Penerimaan');
@@ -2135,23 +2146,32 @@ function renderSummary() {
   const totalIn    = penerimaan.reduce((s,d) => s + d.jumlah, 0);
   const totalOut   = pengeluaran.reduce((s,d) => s + d.jumlah, 0);
 
-  // Hitung saldo kas & bank berdasarkan transaksi + saldo awal
-  const kasIn    = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
-  const kasOut   = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
-  const bankIn   = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
-  const bankOut  = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
+  // Kalau pengaturan belum dimuat, tampilkan loading
+  if (!CFG_LOADED) {
+    ['s-saldo-kas','s-saldo-bank','s-saldo-total','s-saldo-prev'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.textContent === 'Memuat...') return; // sudah loading
+    });
+  }
 
+  // Hitung saldo kas & bank: saldo awal + transaksi
+  const kasIn   = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
+  const kasOut  = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'TUNAI').reduce((s,d) => s+d.jumlah, 0);
+  const bankIn  = penerimaan.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
+  const bankOut = pengeluaran.filter(d => (d.metode||'').toUpperCase() === 'BANK').reduce((s,d) => s+d.jumlah, 0);
+
+  // CFG_SALDO_KAS = saldo kas fisik awal periode
+  // CFG_SALDO_BANK = saldo rekening bank awal periode (tanpa kas)
   const saldoKas   = CFG_SALDO_KAS  + kasIn  - kasOut;
-  const saldoBank  = (CFG_SALDO_BANK - CFG_SALDO_KAS) + bankIn - bankOut;
-  const saldoTotal = CFG_SALDO_AWAL  + totalIn - totalOut;
+  const saldoBank  = CFG_SALDO_BANK + bankIn - bankOut;
+  const saldoTotal = CFG_SALDO_AWAL + totalIn - totalOut;
 
   document.getElementById('s-total-in').textContent    = fmt(totalIn);
   document.getElementById('s-total-out').textContent   = fmt(totalOut);
-  document.getElementById('s-saldo-kas').textContent   = fmt(Math.max(0, saldoKas));
-  document.getElementById('s-saldo-bank').textContent  = fmt(Math.max(0, saldoBank));
-  document.getElementById('s-saldo-total').textContent = fmt(saldoTotal);
-  document.getElementById('s-saldo-prev').textContent  = fmt(CFG_SALDO_AWAL);
-  document.getElementById('s-period-label').textContent = ''; // diisi updateHeroPeriod
+  document.getElementById('s-saldo-kas').textContent   = CFG_LOADED ? fmt(Math.max(0, saldoKas))  : 'Memuat...';
+  document.getElementById('s-saldo-bank').textContent  = CFG_LOADED ? fmt(Math.max(0, saldoBank)) : 'Memuat...';
+  document.getElementById('s-saldo-total').textContent = CFG_LOADED ? fmt(saldoTotal)             : 'Memuat...';
+  document.getElementById('s-saldo-prev').textContent  = CFG_LOADED ? fmt(CFG_SALDO_AWAL)         : '–';
 
   updateHeroPeriod();
 }
@@ -2595,10 +2615,10 @@ async function simpanPengaturan() {
     }
 
     if (result.status === 'ok' || res.ok) {
-      // Update konstanta CFG agar dashboard ikut sinkron
       window.CFG_SALDO_AWAL = parseFloat(cfg.saldo_awal) || CFG_SALDO_AWAL;
       window.CFG_SALDO_KAS  = parseFloat(cfg.saldo_kas)  || CFG_SALDO_KAS;
       window.CFG_SALDO_BANK = parseFloat(cfg.saldo_bank) || CFG_SALDO_BANK;
+      window.CFG_LOADED = true;
       renderSummary();
       alertOk.classList.add('show');
       setTimeout(() => alertOk.classList.remove('show'), 4000);
