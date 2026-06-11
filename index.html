@@ -2032,6 +2032,12 @@ async function fetchPengaturan() {
     setField('rk-jabatan-bendahara', 'jabatan_bendahara');
     setField('rk-khatib',            'khatib');
 
+    // Set petugas Jum'at untuk dashboard
+    if (cfg['khatib'])  window.CFG_KHATIB  = cfg['khatib'];
+    if (cfg['imam'])    window.CFG_IMAM     = cfg['imam'];
+    if (cfg['muadzin']) window.CFG_MUADZIN  = cfg['muadzin'];
+    renderJumatan();
+
     if (cfg['imam'] || cfg['muadzin']) {
       const el = document.getElementById('rk-imam');
       if (el) {
@@ -2423,10 +2429,15 @@ function renderAllokChart() {
 /* =========================================================
    PETUGAS JUMATAN
    ========================================================= */
+// Petugas Jum'at — diisi otomatis oleh fetchPengaturan()
+var CFG_KHATIB  = '–';
+var CFG_IMAM    = '–';
+var CFG_MUADZIN = '–';
+
 function renderJumatan() {
-  document.getElementById('j-khatib').textContent = 'Ustadz Dr. H. Abd. Rauf Aliah, MA';
-  document.getElementById('j-imam').textContent = 'Ustadz Khairil Anwar, S.H';
-  document.getElementById('j-muadzin').textContent = 'Ustadz Muhammad Zaid';
+  document.getElementById('j-khatib').textContent  = CFG_KHATIB  !== '–' ? CFG_KHATIB  : 'Memuat...';
+  document.getElementById('j-imam').textContent    = CFG_IMAM    !== '–' ? CFG_IMAM    : 'Memuat...';
+  document.getElementById('j-muadzin').textContent = CFG_MUADZIN !== '–' ? CFG_MUADZIN : 'Memuat...';
 }
 
 /* =========================================================
